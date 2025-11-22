@@ -1,0 +1,82 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' 
+
+    - name: Install Linux system dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Generate Assets
+      run: python create_assets.py
+
+    - name: Build with PyInstaller (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --name "RBV_Downloader_${{ matrix.os }}" --add-data "assets:assets" gui.py
+
+    - name: Build with PyInstaller (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --name "RBV_Downloader_Windows" --add-data "assets;assets" gui.py
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: RBV_Downloader-${{ matrix.os }}
+        path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -R artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          artifacts/RBV_Downloader-ubuntu-latest/RBV_Downloader_ubuntu-latest
+          artifacts/RBV_Downloader-macos-latest/RBV_Downloader_macos-latest.app/**/*
+          artifacts/RBV_Downloader-macos-latest/RBV_Downloader_macos-latest
+          artifacts/RBV_Downloader-windows-latest/RBV_Downloader_Windows.exe
+        generate_release_notes: true

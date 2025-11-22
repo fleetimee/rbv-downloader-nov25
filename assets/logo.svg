@@ -1,0 +1,11 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background Circle -->
+    <circle cx="256" cy="256" r="240" fill="#2563EB" />
+    
+    <!-- Book Base -->
+    <path d="M120 160C120 160 180 160 256 200C332 160 392 160 392 160V360C392 360 332 360 256 400C180 360 120 360 120 360V160Z" fill="white" stroke="white" stroke-width="20" stroke-linejoin="round"/>
+    <line x1="256" y1="200" x2="256" y2="400" stroke="#E2E8F0" stroke-width="10"/>
+
+    <!-- Download Arrow -->
+    <path d="M256 120V320M256 320L180 240M256 320L332 240" stroke="#F59E0B" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

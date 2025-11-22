@@ -1,5 +1,17 @@
-downloads/
-.venv/
-.DS_Store
 __pycache__/
 *.pyc
+.env
+venv/
+.venv/
+.DS_Store
+
+# App Builds
+build/
+dist/
+*.spec
+
+# Local Config
+config.json
+
+# User Downloads (if in project root)
+downloads/
