@@ -1,4 +1,5 @@
 import requests
+from requests.exceptions import ConnectionError, Timeout, RequestException
 import os
 import time
 import sys
@@ -67,7 +68,6 @@ def download_images(module_code, subfolder, output_dir, headers, progress_callba
     def log(msg, end="\n"):
         if log_callback:
             # log_callback might not support 'end', so we strip it or just log
-            # For GUI logs, we usually just want the message.
             log_callback(msg)
         else:
             print(msg, end=end)
@@ -102,16 +102,6 @@ def download_images(module_code, subfolder, output_dir, headers, progress_callba
                 # Only print the \r style progress if we are in CLI mode (no log_callback)
                 print(f"  [DOWNLOADING] Page {page}...", end="\r")
             else:
-                 # For GUI, maybe just log every 10 pages or start/stop to avoid spamming?
-                 # Or just log it. Let's log it.
-                 pass 
-                 # Actually, logging every page to a text box might be slow. 
-                 # Let's log every page but maybe the GUI handles it.
-                 # Since the GUI clears and appends, it might flicker if we do it too fast.
-                 # Let's trust the log_callback.
-                 # log(f"  [DOWNLOADING] Page {page}...") 
-                 # Update: To avoid spamming the GUI log, let's NOT log every page download success line 
-                 # unless it's an error or start/finish.
                  pass
 
             if progress_callback:
@@ -125,7 +115,7 @@ def download_images(module_code, subfolder, output_dir, headers, progress_callba
             }
             
             try:
-                response = session.get(BASE_URL, params=params, timeout=10)
+                response = session.get(BASE_URL, params=params, timeout=20)
                 
                 if response.status_code == 200:
                     content_type = response.headers.get('Content-Type', '').lower()
@@ -135,18 +125,49 @@ def download_images(module_code, subfolder, output_dir, headers, progress_callba
                         consecutive_errors = 0
                         page += 1
                     else:
-                        log(f"  [STOP] Page {page} returned {content_type}. Assuming end of document.")
+                        # Often returns HTML/Text when page doesn't exist or session expired (though usually 403)
+                        log(f"  [INFO] Page {page} reached end of document (Content-Type: {content_type}).")
                         break
-                else:
-                    log(f"  [FAILED] Page {page} Status: {response.status_code}")
-                    consecutive_errors += 1
-                    if consecutive_errors > 3:
-                        break
-            except Exception as e:
-                log(f"  [EXCEPTION] {e}")
-                consecutive_errors += 1
-                if consecutive_errors > 3:
+                
+                elif response.status_code == 403:
+                    msg = "Authentication failed. Your cookies (PHPSESSID/Sucuri) might be expired. Please refresh them."
+                    log(f"  [CRITICAL] {msg}")
+                    raise PermissionError(msg)
+
+                elif response.status_code == 404:
+                    if page == 1:
+                        log(f"  [INFO] Document {doc} does not exist. Skipping.")
+                    else:
+                        log(f"  [INFO] Finished downloading {doc}.")
                     break
+                
+                else:
+                    log(f"  [FAILED] Page {page} returned status: {response.status_code}")
+                    consecutive_errors += 1
+
+            except ConnectionError:
+                msg = "Network error. Unable to connect to the server. Please check your internet connection."
+                log(f"\n  [CRITICAL] {msg}")
+                raise ConnectionError(msg)
+            
+            except Timeout:
+                log(f"\n  [WARNING] Connection timed out for page {page}. Retrying...")
+                consecutive_errors += 1
+            
+            except RequestException as e:
+                log(f"\n  [ERROR] Unexpected network error: {e}")
+                consecutive_errors += 1
+            
+            except Exception as e:
+                log(f"\n  [EXCEPTION] {e}")
+                # Check if it's the PermissionError we raised above
+                if isinstance(e, PermissionError):
+                    raise e
+                consecutive_errors += 1
+            
+            if consecutive_errors > 3:
+                log(f"\n  [SKIP] Too many errors ({consecutive_errors}) for {doc}. Moving to next document.")
+                break
         
         if progress_callback:
             progress_callback({"status": "processing", "doc": doc, "message": "Merging PDF"})
@@ -182,7 +203,15 @@ def main():
     print(f"Output Directory: {output_dir}")
     print("-----------------------------------")
     
-    download_images(module_code, subfolder, output_dir, headers)
+    try:
+        download_images(module_code, subfolder, output_dir, headers)
+        print("\nAll downloads completed successfully.")
+    except PermissionError as e:
+        print(f"\n[X] STOPPED: {e}")
+    except ConnectionError as e:
+        print(f"\n[X] STOPPED: {e}")
+    except Exception as e:
+        print(f"\n[X] An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     main()
