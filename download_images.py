@@ -68,7 +68,7 @@ def merge_to_pdf(doc_name, image_dir, output_dir):
     except Exception as e:
         print(f"  [ERROR] Failed to create PDF for {doc_name}: {e}")
 
-def download_images(module_code, subfolder, output_dir, headers):
+def download_images(module_code, subfolder, output_dir, headers, progress_callback=None):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"Created directory: {output_dir}")
@@ -82,6 +82,8 @@ def download_images(module_code, subfolder, output_dir, headers):
             os.makedirs(doc_dir)
         
         print(f"Processing Document: {doc}")
+        if progress_callback:
+            progress_callback({"status": "processing", "doc": doc, "message": "Starting download"})
         
         page = 1
         consecutive_errors = 0
@@ -96,6 +98,8 @@ def download_images(module_code, subfolder, output_dir, headers):
                 continue
 
             print(f"  [DOWNLOADING] Page {page}...", end="\r")
+            if progress_callback:
+                 progress_callback({"status": "processing", "doc": doc, "page": page, "message": f"Downloading page {page}"})
             
             params = {
                 "doc": doc,
@@ -129,6 +133,8 @@ def download_images(module_code, subfolder, output_dir, headers):
                     break
         
         # 2. Merge to PDF
+        if progress_callback:
+            progress_callback({"status": "processing", "doc": doc, "message": "Merging PDF"})
         merge_to_pdf(doc, doc_dir, output_dir)
         print(f"Finished {doc}.\n")
 
