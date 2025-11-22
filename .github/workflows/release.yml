@@ -13,11 +13,32 @@ permissions:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            label: Windows x64
+            exe_name: RBV_Downloader-Windows-x64
+            upload_path: dist/RBV_Downloader-Windows-x64.exe
+            
+          - os: ubuntu-latest
+            label: Linux x64
+            exe_name: RBV_Downloader-Linux-x64
+            upload_path: dist/RBV_Downloader-Linux-x64
+
+          # macOS Intel (x86_64)
+          - os: macos-13
+            label: macOS Intel
+            exe_name: RBV_Downloader-macOS-Intel
+            upload_path: dist/RBV_Downloader-macOS-Intel.zip
+
+          # macOS Apple Silicon (ARM64)
+          - os: macos-latest
+            label: macOS ARM64
+            exe_name: RBV_Downloader-macOS-ARM64
+            upload_path: dist/RBV_Downloader-macOS-ARM64.zip
 
     steps:
     - uses: actions/checkout@v4
@@ -38,21 +59,27 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Build with PyInstaller (Unix)
+    - name: Build with PyInstaller (Unix/Mac)
       if: runner.os != 'Windows'
       run: |
-        pyinstaller --noconfirm --onefile --windowed --name "RBV_Downloader_${{ matrix.os }}" --add-data "assets:assets" gui.py
+        pyinstaller --noconfirm --onefile --windowed --name "${{ matrix.exe_name }}" --add-data "assets:assets" gui.py
 
     - name: Build with PyInstaller (Windows)
       if: runner.os == 'Windows'
       run: |
-        pyinstaller --noconfirm --onefile --windowed --name "RBV_Downloader_Windows" --add-data "assets;assets" gui.py
+        pyinstaller --noconfirm --onefile --windowed --name "${{ matrix.exe_name }}" --add-data "assets;assets" gui.py
+
+    - name: Zip macOS App
+      if: runner.os == 'macOS'
+      run: |
+        cd dist
+        zip -r ${{ matrix.exe_name }}.zip ${{ matrix.exe_name }}.app
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: RBV_Downloader-${{ matrix.os }}
-        path: dist/
+        name: ${{ matrix.exe_name }}
+        path: ${{ matrix.upload_path }}
 
   release:
     needs: build
@@ -72,8 +99,5 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          artifacts/RBV_Downloader-ubuntu-latest/RBV_Downloader_ubuntu-latest
-          artifacts/RBV_Downloader-macos-latest/RBV_Downloader_macos-latest.app/**/*
-          artifacts/RBV_Downloader-macos-latest/RBV_Downloader_macos-latest
-          artifacts/RBV_Downloader-windows-latest/RBV_Downloader_Windows.exe
+          artifacts/**/RBV_Downloader*
         generate_release_notes: true
