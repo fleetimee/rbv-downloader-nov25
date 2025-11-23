@@ -64,7 +64,7 @@ def merge_to_pdf(doc_name, image_dir, output_dir, log_callback=None):
     except Exception as e:
         log(f"  [ERROR] Failed to create PDF for {doc_name}: {e}")
 
-def download_images(module_code, subfolder, output_dir, headers, progress_callback=None, log_callback=None):
+def download_images(module_code, subfolder, output_dir, headers, progress_callback=None, log_callback=None, stop_event=None):
     def log(msg, end="\n"):
         if log_callback:
             # log_callback might not support 'end', so we strip it or just log
@@ -79,19 +79,34 @@ def download_images(module_code, subfolder, output_dir, headers, progress_callba
     session = requests.Session()
     session.headers.update(headers)
 
-    for doc in DOCUMENTS:
+    total_docs = len(DOCUMENTS)
+    for i, doc in enumerate(DOCUMENTS):
+        if stop_event and stop_event.is_set():
+            log(f"  [INFO] Download stopped by user.")
+            return # Exit function if stop event is set
+            
         doc_dir = os.path.join(output_dir, doc)
         if not os.path.exists(doc_dir):
             os.makedirs(doc_dir)
         
         log(f"Processing Document: {doc}")
         if progress_callback:
-            progress_callback({"status": "processing", "doc": doc, "message": "Starting download"})
+            progress_callback({
+                "status": "processing", 
+                "doc": doc, 
+                "message": "Starting download",
+                "current_doc_index": i,
+                "total_docs": total_docs
+            })
         
         page = 1
         consecutive_errors = 0
         
         while True:
+            if stop_event and stop_event.is_set():
+                log(f"  [INFO] Download stopped by user for {doc}.")
+                break # Break inner loop, will check outer stop_event and return
+                
             filename = os.path.join(doc_dir, f"{page}.jpg")
             
             if os.path.exists(filename):
@@ -105,7 +120,14 @@ def download_images(module_code, subfolder, output_dir, headers, progress_callba
                  pass
 
             if progress_callback:
-                 progress_callback({"status": "processing", "doc": doc, "page": page, "message": f"Downloading page {page}"})
+                 progress_callback({
+                     "status": "processing", 
+                     "doc": doc, 
+                     "page": page, 
+                     "message": f"Downloading page {page}",
+                     "current_doc_index": i,
+                     "total_docs": total_docs
+                 })
             
             params = {
                 "doc": doc,
@@ -170,21 +192,50 @@ def download_images(module_code, subfolder, output_dir, headers, progress_callba
                 break
         
         if progress_callback:
-            progress_callback({"status": "processing", "doc": doc, "message": "Merging PDF"})
+            progress_callback({
+                "status": "processing", 
+                "doc": doc, 
+                "message": "Merging PDF",
+                "current_doc_index": i,
+                "total_docs": total_docs
+            })
         
         # Pass the log_callback to merge_to_pdf
         merge_to_pdf(doc, doc_dir, output_dir, log_callback)
         log(f"Finished {doc}.\n")
 
+        # Clean up downloaded images
+        try:
+            log(f"  [CLEANUP] Removing downloaded images for {doc}...")
+            for f in os.listdir(doc_dir):
+                if f.endswith(".jpg"):
+                    os.remove(os.path.join(doc_dir, f))
+            os.rmdir(doc_dir) # Remove the empty document directory
+            log(f"  [CLEANUP] Cleaned up images for {doc}.")
+        except Exception as e:
+            log(f"  [WARNING] Could not clean up images for {doc}: {e}")
+
 def main():
     print("--- Pustaka UT Downloader Setup ---")
     
+    print("\nTo get the Module Code:")
+    print("1. Go to https://pustaka.ut.ac.id/reader/ and navigate to your module.")
+    print("2. The Module Code is part of the URL (e.g., 'ADBI421103' in https://pustaka.ut.ac.id/reader/index.php?modul=ADBI421103).")
     module_code = input("Enter Module Code (e.g. ADBI421103): ").strip()
     if not module_code:
         print("Error: Module Code is required.")
         return
 
     print("\nPlease enter your cookies:")
+    print("To get PHPSESSID and Sucuri Cookie:")
+    print("1. Go to any module page on https://pustaka.ut.ac.id/reader/.")
+    print("2. Open your browser's Developer Tools (F12 or Ctrl+Shift+I/Cmd+Option+I).")
+    print("3. Go to the 'Network' tab and refresh the page.")
+    print("4. Find a request to 'view.php' (or similar resource).")
+    print("5. In the 'Headers' tab of that request, scroll down to 'Request Headers'.")
+    print("6. Locate the 'Cookie' header.")
+    print("7. Copy the value of 'PHPSESSID' (e.g., 'abcdef1234567890abcdef12345678').")
+    print("8. Copy the value of 'sucuricp_tfca_...' (it starts with 'sucuricp_tfca_...=' and is a long string).")
     phpsessid = input("  PHPSESSID: ").strip()
     sucuri_cookie = input("  Sucuri Cookie (e.g. sucuricp_tfca_...=1): ").strip()
     
@@ -203,14 +254,46 @@ def main():
     print(f"Output Directory: {output_dir}")
     print("-----------------------------------")
     
+    def cli_logger(msg):
+        # Clear the current line (where progress might be) before logging
+        sys.stdout.write("\r" + " " * 80 + "\r")
+        print(msg)
+        sys.stdout.flush()
+
+    def cli_progress(data):
+        doc = data.get("doc", "?")
+        message = data.get("message", "")
+        current = data.get("current_doc_index", 0)
+        total = data.get("total_docs", 1)
+        
+        # Human readable index (1-based)
+        idx_display = current + 1
+        
+        # Format: [1/10] DocName - Downloading page 5...
+        # Use \r to overwrite the line
+        sys.stdout.write(f"\r[{idx_display}/{total}] {doc} - {message}".ljust(80))
+        sys.stdout.flush()
+
     try:
-        download_images(module_code, subfolder, output_dir, headers)
+        download_images(
+            module_code, 
+            subfolder, 
+            output_dir, 
+            headers, 
+            progress_callback=cli_progress,
+            log_callback=cli_logger
+        )
+        # clear the last progress line
+        sys.stdout.write("\r" + " " * 80 + "\r")
         print("\nAll downloads completed successfully.")
     except PermissionError as e:
+        sys.stdout.write("\r" + " " * 80 + "\r")
         print(f"\n[X] STOPPED: {e}")
     except ConnectionError as e:
+        sys.stdout.write("\r" + " " * 80 + "\r")
         print(f"\n[X] STOPPED: {e}")
     except Exception as e:
+        sys.stdout.write("\r" + " " * 80 + "\r")
         print(f"\n[X] An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
