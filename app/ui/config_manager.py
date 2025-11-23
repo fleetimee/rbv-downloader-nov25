@@ -11,7 +11,8 @@ class ConfigManager:
             "module_code": "", 
             "phpsessid": "", 
             "sucuri_cookie": "",
-            "download_path": default_path
+            "download_path": default_path,
+            "check_updates_on_startup": False
         }
         
         if os.path.exists(CONFIG_FILE):

@@ -25,6 +25,7 @@ class DownloaderApp:
         self.phpsessid_var = tk.StringVar(value=self.config.get("phpsessid"))
         self.sucuri_cookie_var = tk.StringVar(value=self.config.get("sucuri_cookie"))
         self.download_path_var = tk.StringVar(value=self.config.get("download_path"))
+        self.check_updates_var = tk.BooleanVar(value=self.config.get("check_updates_on_startup", True))
         self.progress_var = tk.DoubleVar()
         
         # UI Components (Placeholder for references)
@@ -46,6 +47,10 @@ class DownloaderApp:
         # Bind closing protocol
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+        # Auto-check updates
+        if self.check_updates_var.get():
+             self.check_for_updates_silent()
+
     def on_closing(self):
         # Signal the download thread to stop if it's running
         self.stop_event.set()
@@ -55,7 +60,8 @@ class DownloaderApp:
             "module_code": "",  # Clear this
             "phpsessid": "",    # Clear this
             "sucuri_cookie": "", # Clear this
-            "download_path": self.download_path_var.get().strip() # Keep this
+            "download_path": self.download_path_var.get().strip(), # Keep this
+            "check_updates_on_startup": self.check_updates_var.get()
         }
         ConfigManager.save_config(data_to_save)
         self.root.destroy()
@@ -185,6 +191,7 @@ class DownloaderApp:
         menubar = tk.Menu(self.root)
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="Check for Updates", command=self.check_for_updates_ui)
+        file_menu.add_checkbutton(label="Check Updates on Startup", variable=self.check_updates_var)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.on_closing)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -203,6 +210,15 @@ class DownloaderApp:
             "Developed by fleetimee" # Add your name/handle here if desired
         )
         messagebox.showinfo("About RBV Downloader", about_text)
+
+    def check_for_updates_silent(self):
+        threading.Thread(target=self._check_update_thread_silent, daemon=True).start()
+
+    def _check_update_thread_silent(self):
+        # Silent check doesn't show "No Updates" popup, only "Update Available"
+        available, version_tag = self.updater.check_for_updates()
+        if available:
+            self.root.after(0, lambda: self.confirm_update(version_tag))
 
     def check_for_updates_ui(self):
         self.status_label.config(text="Checking for updates...")
