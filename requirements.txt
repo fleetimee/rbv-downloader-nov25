@@ -4,3 +4,4 @@ fastapi
 uvicorn
 pyinstaller
 tqdm
+packaging

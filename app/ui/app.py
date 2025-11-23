@@ -7,15 +7,18 @@ from app.ui.config_manager import ConfigManager
 from app.ui.utils import open_folder
 from download_images import download_images
 from app.core.config import HEADERS
+from app.services.updater import Updater
+from app.core.version import VERSION
 
 class DownloaderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("RBV Downloader")
+        self.root.title(f"RBV Downloader v{VERSION}")
         self.root.geometry("500x720")
         
         self.config = ConfigManager.load_config()
         self.stop_event = threading.Event()
+        self.updater = Updater()
         
         # Variables
         self.module_code_var = tk.StringVar(value=self.config.get("module_code"))
@@ -36,6 +39,9 @@ class DownloaderApp:
         # Build Layout
         self.layout = LayoutBuilder(self)
         self.layout.create_widgets()
+
+        # Create Menu
+        self.create_menu()
 
         # Bind closing protocol
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -174,3 +180,90 @@ class DownloaderApp:
     def open_folder_action(self):
         path = self.download_path_var.get().strip()
         open_folder(path)
+
+    def create_menu(self):
+        menubar = tk.Menu(self.root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Check for Updates", command=self.check_for_updates_ui)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.on_closing)
+        menubar.add_cascade(label="File", menu=file_menu)
+        
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="About", command=self.show_about_dialog)
+        help_menu.add_command(label=f"Version {VERSION}", state="disabled")
+        menubar.add_cascade(label="Help", menu=help_menu)
+        
+        self.root.config(menu=menubar)
+
+    def show_about_dialog(self):
+        about_text = (
+            f"RBV Downloader v{VERSION}\n\n"
+            "A simple tool to download RBV course materials.\n\n"
+            "Developed by fleetimee" # Add your name/handle here if desired
+        )
+        messagebox.showinfo("About RBV Downloader", about_text)
+
+    def check_for_updates_ui(self):
+        self.status_label.config(text="Checking for updates...")
+        threading.Thread(target=self._check_update_thread, daemon=True).start()
+
+    def _check_update_thread(self):
+        available, version_tag = self.updater.check_for_updates()
+        if available:
+            self.root.after(0, lambda: self.confirm_update(version_tag))
+        else:
+            self.root.after(0, lambda: messagebox.showinfo("No Updates", f"You are on the latest version ({VERSION})."))
+            self.root.after(0, lambda: self.status_label.config(text="Ready"))
+
+    def confirm_update(self, version_tag):
+        if messagebox.askyesno("Update Available", f"New version {version_tag} is available. Update now?"):
+            self.start_update_download()
+        else:
+             self.status_label.config(text="Ready")
+
+    def start_update_download(self):
+        # Create a progress window
+        self.update_window = tk.Toplevel(self.root)
+        self.update_window.title("Updating...")
+        self.update_window.geometry("300x150")
+        
+        tk.Label(self.update_window, text="Downloading Update...", pady=10).pack()
+        
+        self.update_progress_var = tk.DoubleVar()
+        import tkinter.ttk as ttk
+        pb = ttk.Progressbar(self.update_window, variable=self.update_progress_var, maximum=100)
+        pb.pack(fill=tk.X, padx=20, pady=10)
+        
+        self.update_status = tk.Label(self.update_window, text="0%")
+        self.update_status.pack()
+        
+        threading.Thread(target=self._download_update_thread, daemon=True).start()
+
+    def _download_update_thread(self):
+        def progress(current, total):
+            if total > 0:
+                pct = (current / total) * 100
+                self.root.after(0, lambda: self.update_progress_var.set(pct))
+                self.root.after(0, lambda: self.update_status.config(text=f"{int(pct)}%"))
+            
+        file_path = self.updater.download_update(progress_callback=progress)
+        
+        if file_path:
+             self.root.after(0, lambda: self.install_update_ui(file_path))
+        else:
+             self.root.after(0, lambda: self.update_window.destroy())
+             self.root.after(0, lambda: messagebox.showerror("Error", "Download failed."))
+
+    def install_update_ui(self, file_path):
+        self.update_window.destroy()
+        success, msg = self.updater.install_update(file_path)
+        if success:
+            if msg == "restart_required":
+                 messagebox.showinfo("Update Complete", "Update installed. The application will now restart.")
+                 # On Windows, the batch file restarts it. On Linux, we might need to exit.
+                 self.root.destroy() 
+            else:
+                 messagebox.showinfo("Update Downloaded", msg)
+        else:
+             messagebox.showerror("Update Failed", msg)
