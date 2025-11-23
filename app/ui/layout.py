@@ -11,12 +11,21 @@ class LayoutBuilder:
     def create_widgets(self):
         main_frame = ttk.Frame(self.root, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self._create_header(main_frame)
-        self._create_inputs(main_frame)
-        self._create_buttons(main_frame)
-        self._create_progress_section(main_frame)
-        self._create_log_area(main_frame)
+
+        # Top section for header, inputs, buttons
+        top_section_frame = ttk.Frame(main_frame)
+        top_section_frame.pack(fill=tk.X, expand=False) # Do not expand, just take required space
+
+        self._create_header(top_section_frame)
+        self._create_inputs(top_section_frame)
+        self._create_buttons(top_section_frame)
+
+        # Bottom section for progress and log area
+        log_section_frame = ttk.Frame(main_frame)
+        log_section_frame.pack(fill=tk.BOTH, expand=True) # This frame will expand vertically
+
+        self._create_progress_section(log_section_frame)
+        self._create_log_area(log_section_frame)
 
     def _create_header(self, parent):
         header_frame = ttk.Frame(parent)
@@ -67,7 +76,16 @@ class LayoutBuilder:
         path_frame.pack(fill=tk.X, pady=(0, 5))
         
         ttk.Entry(path_frame, textvariable=self.app.download_path_var, font=("Helvetica", 12)).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
-        ttk.Button(path_frame, text="Browse", command=self.app.browse_folder).pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Browse Button with Icon
+        browse_btn = ttk.Button(
+            path_frame, 
+            text=" Browse", 
+            command=self.app.browse_folder,
+            image=getattr(self.app, 'icon_browse', None),
+            compound=tk.LEFT
+        )
+        browse_btn.pack(side=tk.RIGHT, padx=(5, 0))
 
         ttk.Label(parent, text="* Settings are saved automatically", font=("Arial", 11, "italic"), foreground="gray").pack(anchor="w", pady=(0, 20))
 
@@ -85,16 +103,49 @@ class LayoutBuilder:
 
     def _create_buttons(self, parent):
         btn_frame = ttk.Frame(parent)
-        btn_frame.pack(fill=tk.X, pady=(0, 20))
+        btn_frame.pack(fill=tk.X, pady=(0, 5)) 
         
         style = ttk.Style()
-        style.configure("Big.TButton", font=("Helvetica", 12))
+        # Add padding to make buttons taller/thicker. (left, top, right, bottom)
+        style.configure("Big.TButton", font=("Helvetica", 12), padding=(10, 10))
 
-        self.app.start_btn = ttk.Button(btn_frame, text="Start Download", command=self.app.start_download_thread, style="Big.TButton")
-        self.app.start_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=5)
+        # Load Icons
+        try:
+            play_icon_path = resource_path("assets/icon_play.png")
+            folder_icon_path = resource_path("assets/icon_folder.png")
+            stop_icon_path = resource_path("assets/icon_stop.png")
+            browse_icon_path = resource_path("assets/icon_browse.png")
+            
+            self.app.icon_play = tk.PhotoImage(file=play_icon_path)
+            self.app.icon_folder = tk.PhotoImage(file=folder_icon_path)
+            self.app.icon_stop = tk.PhotoImage(file=stop_icon_path)
+            self.app.icon_browse = tk.PhotoImage(file=browse_icon_path) # Ensure this is loaded
+        except Exception as e:
+            print(f"Error loading button icons: {e}")
+            self.app.icon_play = None
+            self.app.icon_folder = None
+            self.app.icon_stop = None
+            self.app.icon_browse = None
+
+        self.app.start_btn = ttk.Button(
+            btn_frame, 
+            text=" Start Download", 
+            command=self.app.start_download_thread, 
+            style="Big.TButton",
+            image=self.app.icon_play, # Use play icon
+            compound=tk.LEFT
+        )
+        self.app.start_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5)) # Removed ipady
         
-        self.app.open_btn = ttk.Button(btn_frame, text="Open Folder", command=self.app.open_folder_action, style="Big.TButton")
-        self.app.open_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0), ipady=5)
+        self.app.open_btn = ttk.Button(
+            btn_frame, 
+            text=" Open Folder", 
+            command=self.app.open_folder_action, 
+            style="Big.TButton",
+            image=self.app.icon_folder,
+            compound=tk.LEFT
+        )
+        self.app.open_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0)) # Removed ipady
 
     def _create_progress_section(self, parent):
         progress_frame = ttk.Frame(parent)
@@ -108,5 +159,5 @@ class LayoutBuilder:
 
     def _create_log_area(self, parent):
         ttk.Label(parent, text="Logs:", font=("Helvetica", 12)).pack(anchor="w", pady=(0, 5))
-        self.app.log_area = scrolledtext.ScrolledText(parent, height=15, state='disabled')
+        self.app.log_area = scrolledtext.ScrolledText(parent, height=20, state='disabled')
         self.app.log_area.pack(fill=tk.BOTH, expand=True)

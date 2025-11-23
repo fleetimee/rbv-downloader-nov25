@@ -85,6 +85,12 @@ class ModuleDownloader:
                         consecutive_errors = 0
                         page += 1
                     else:
+                        # Critical Check: If the very first page of the first document is not an image,
+                        # the inputs are definitely wrong (likely redirected to login or error page).
+                        if doc_index == 0 and page == 1:
+                            logger.error("Server returned HTML instead of Image. Inputs are likely invalid.")
+                            raise ValueError("Invalid Module Code or Cookies. (Server returned text/html)")
+
                         logger.info(f"  [INFO] Page {page} reached end (Content-Type: {content_type}).")
                         break
                 
@@ -95,6 +101,10 @@ class ModuleDownloader:
                 
                 elif response.status_code == 404:
                     if page == 1:
+                        # Critical Check: If the first standard document (DAFIS) is missing, warn the user.
+                        if doc_index == 0:
+                             logger.error("First document not found.")
+                             raise ValueError("Module Code likely invalid (DAFIS not found).")
                         logger.info(f"  [INFO] Document {doc} does not exist. Skipping.")
                     else:
                         logger.info(f"  [INFO] Finished downloading {doc}.")
@@ -114,7 +124,7 @@ class ModuleDownloader:
                 if consecutive_errors > 3:
                     raise e
             except Exception as e:
-                if isinstance(e, PermissionError): raise e
+                if isinstance(e, (PermissionError, ValueError)): raise e
                 logger.error(f"Unexpected error: {e}")
                 consecutive_errors += 1
             

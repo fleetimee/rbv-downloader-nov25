@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 import threading
 import os
+from datetime import datetime, timezone, timedelta
+import re # Import regex module
 from app.ui.layout import LayoutBuilder
 from app.ui.config_manager import ConfigManager
 from app.ui.utils import open_folder
@@ -75,8 +77,12 @@ class DownloaderApp:
     def log(self, message):
         def _update():
             if self.log_area:
+                tz = timezone(timedelta(hours=7))
+                timestamp = datetime.now(tz).strftime("%H:%M:%S")
+                log_msg = f"[{timestamp}] {message}"
+                
                 self.log_area.config(state='normal')
-                self.log_area.insert(tk.END, str(message) + "\n")
+                self.log_area.insert(tk.END, log_msg + "\n")
                 self.log_area.see(tk.END)
                 self.log_area.config(state='disabled')
         self.root.after(0, _update)
@@ -113,6 +119,11 @@ class DownloaderApp:
             messagebox.showerror("Error", "All fields are required!")
             return
         
+        # Sucuri Cookie validation
+        if not re.match(r"^sucuricp.*=1$", sucuri_cookie):
+            messagebox.showerror("Error", "Sucuri Cookie must start with 'sucuricp' and end with '=1'.")
+            return
+
         if not download_path:
              messagebox.showerror("Error", "Download path is required!")
              return
@@ -125,7 +136,7 @@ class DownloaderApp:
             "download_path": download_path
         })
         
-        self.start_btn.config(text="Stop Process", command=self.stop_download_thread, state='normal')
+        self.start_btn.config(text=" Stop Process", command=self.stop_download_thread, state='normal', image=self.icon_stop, compound=tk.LEFT)
         self.open_btn.config(state='disabled')
         
         self.log_area.config(state='normal')
@@ -141,7 +152,7 @@ class DownloaderApp:
     def stop_download_thread(self):
         self.log("Stopping download...")
         self.stop_event.set()
-        self.start_btn.config(text="Start Download", command=self.start_download_thread, state='normal')
+        self.start_btn.config(text=" Start Download", command=self.start_download_thread, state='normal', image=self.icon_play, compound=tk.LEFT)
         self.open_btn.config(state='normal')
         self.status_label.config(text="Download Stopped.")
         
@@ -177,11 +188,25 @@ class DownloaderApp:
                 self.log("Download was stopped.")
                 
         except Exception as e:
-            self.log(f"Error: {e}")
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            msg = str(e)
+            if not msg or msg == "None":
+                msg = f"An unexpected error occurred: {type(e).__name__}"
+            
+            self.log(f"Error: {msg}")
+            self.root.after(0, lambda: messagebox.showerror("Error", msg))
+            self.root.after(0, self.clear_log_action) # Clear logs on error
         finally:
             self.root.after(0, lambda: self.start_btn.config(text="Start Download", command=self.start_download_thread, state='normal'))
-            self.root.after(0, lambda: self.open_btn.config(state='normal'))
+            self.root.after(0, lambda: self.open_btn.config(state='normal')) # Re-enable open button
+    
+    def clear_log_action(self):
+        if self.log_area:
+            self.log_area.config(state='normal')
+            self.log_area.delete(1.0, tk.END)
+            self.log_area.config(state='disabled')
+        self.progress_var.set(0) # Reset progress bar
+        self.status_label.config(text="Ready") # Reset status label
+        self.log("Logs and progress cleared.")
 
     def open_folder_action(self):
         path = self.download_path_var.get().strip()
@@ -196,6 +221,10 @@ class DownloaderApp:
         file_menu.add_command(label="Exit", command=self.on_closing)
         menubar.add_cascade(label="File", menu=file_menu)
         
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        tools_menu.add_command(label="Clear Logs", command=self.clear_log_action)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="About", command=self.show_about_dialog)
         help_menu.add_command(label=f"Version {VERSION}", state="disabled")
