@@ -1,6 +1,6 @@
 # RBV Downloader
 
-[Tutorial Video](https://www.youtube.com/watch?v=MS-MIKDhhEw)
+[![Tutorial Video](https://img.youtube.com/vi/MS-MIKDhhEw/0.jpg)](https://www.youtube.com/watch?v=MS-MIKDhhEw)
 
 A concise Python tool to download course materials from **Ruang Baca Virtual (RBV) - Pustaka UT** and automatically merge them into PDF files.
 
