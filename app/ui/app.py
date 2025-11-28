@@ -1,3 +1,4 @@
+import traceback
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import threading
@@ -106,48 +107,54 @@ class DownloaderApp:
         self.root.after(0, _update)
         
     def start_download_thread(self):
-        module_code = self.module_code_var.get().strip()
-        phpsessid = self.phpsessid_var.get().strip()
-        sucuri_cookie = self.sucuri_cookie_var.get().strip()
-        download_path = self.download_path_var.get().strip()
-        
-        if module_code == "e.g. ADBI421103": module_code = ""
-        if phpsessid == "e.g. abcdef1234567890abcdef12345678": phpsessid = ""
-        if sucuri_cookie == "e.g. sucuricp_tfca_...=1": sucuri_cookie = ""
-        
-        if not module_code or not phpsessid or not sucuri_cookie:
-            messagebox.showerror("Error", "All fields are required!")
-            return
-        
-        # Sucuri Cookie validation
-        if not re.match(r"^sucuricp.*=1$", sucuri_cookie):
-            messagebox.showerror("Error", "Sucuri Cookie must start with 'sucuricp' and end with '=1'.")
-            return
+        try:
+            module_code = self.module_code_var.get().strip()
+            phpsessid = self.phpsessid_var.get().strip()
+            sucuri_cookie = self.sucuri_cookie_var.get().strip()
+            download_path = self.download_path_var.get().strip()
+            
+            if module_code == "e.g. ADBI421103": module_code = ""
+            if phpsessid == "e.g. abcdef1234567890abcdef12345678": phpsessid = ""
+            if sucuri_cookie == "e.g. sucuricp_tfca_...=1": sucuri_cookie = ""
+            
+            if not module_code or not phpsessid or not sucuri_cookie:
+                messagebox.showerror("Error", "All fields are required!")
+                return
+            
+            # Sucuri Cookie validation
+            if not re.match(r"^sucuricp.*=1$", sucuri_cookie):
+                messagebox.showerror("Error", "Sucuri Cookie must start with 'sucuricp' and end with '=1'.")
+                return
 
-        if not download_path:
-             messagebox.showerror("Error", "Download path is required!")
-             return
+            if not download_path:
+                 messagebox.showerror("Error", "Download path is required!")
+                 return
 
-        # Save config
-        ConfigManager.save_config({
-            "module_code": module_code,
-            "phpsessid": phpsessid,
-            "sucuri_cookie": sucuri_cookie,
-            "download_path": download_path
-        })
-        
-        self.start_btn.config(text=" Stop Process", command=self.stop_download_thread, state='normal', image=self.icon_stop, compound=tk.LEFT)
-        self.open_btn.config(state='disabled')
-        
-        self.log_area.config(state='normal')
-        self.log_area.delete(1.0, tk.END)
-        self.log_area.config(state='disabled')
-        
-        self.progress_var.set(0)
-        self.status_label.config(text="Starting...")
-        
-        self.stop_event.clear()
-        threading.Thread(target=self.run_download, args=(module_code, phpsessid, sucuri_cookie, download_path, self.stop_event), daemon=True).start()
+            # Save config
+            ConfigManager.save_config({
+                "module_code": module_code,
+                "phpsessid": phpsessid,
+                "sucuri_cookie": sucuri_cookie,
+                "download_path": download_path
+            })
+            
+            self.start_btn.config(text=" Stop Process", command=self.stop_download_thread, state='normal', image=self.icon_stop, compound=tk.LEFT)
+            self.open_btn.config(state='disabled')
+            
+            self.log_area.config(state='normal')
+            self.log_area.delete(1.0, tk.END)
+            self.log_area.config(state='disabled')
+            
+            self.progress_var.set(0)
+            self.status_label.config(text="Starting...")
+            
+            self.stop_event.clear()
+            threading.Thread(target=self.run_download, args=(module_code, phpsessid, sucuri_cookie, download_path, self.stop_event), daemon=True).start()
+
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            print(f"Startup Error: {e}\n{error_trace}") # Print to console if available
+            messagebox.showerror("Startup Error", f"Failed to start download:\n{e}")
         
     def stop_download_thread(self):
         self.log("Stopping download...")
@@ -192,11 +199,14 @@ class DownloaderApp:
             if not msg or msg == "None":
                 msg = f"An unexpected error occurred: {type(e).__name__}"
             
+            error_trace = traceback.format_exc()
             self.log(f"Error: {msg}")
+            self.log(f"Traceback:\n{error_trace}")
+            
             self.root.after(0, lambda: messagebox.showerror("Error", msg))
-            self.root.after(0, self.clear_log_action) # Clear logs on error
+            self.root.after(0, lambda: self.status_label.config(text="Error occurred"))
         finally:
-            self.root.after(0, lambda: self.start_btn.config(text="Start Download", command=self.start_download_thread, state='normal'))
+            self.root.after(0, lambda: self.start_btn.config(text=" Start Download", command=self.start_download_thread, state='normal', image=self.icon_play, compound=tk.LEFT))
             self.root.after(0, lambda: self.open_btn.config(state='normal')) # Re-enable open button
     
     def clear_log_action(self):

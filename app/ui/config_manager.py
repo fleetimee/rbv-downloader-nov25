@@ -1,7 +1,7 @@
 import os
 import json
 
-CONFIG_FILE = "config.json"
+CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".rbv_downloader_config.json")
 
 class ConfigManager:
     @staticmethod
